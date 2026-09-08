@@ -162,8 +162,20 @@ async def send_items(message: Message, repo: Repository, state: FSMContext, page
         page = total_pages - 1
         items, total = await repo.active_items(page, PER_PAGE, city, campus)
     if not items:
+        if campus:
+            empty_text = (
+                f"В месте «{escape(campus)}» пока нет опубликованных "
+                "объявлений о потерянных или найденных вещах."
+            )
+        elif city:
+            empty_text = (
+                f"В городе или районе «{escape(city)}» пока нет опубликованных "
+                "объявлений о потерянных или найденных вещах."
+            )
+        else:
+            empty_text = "Пока нет опубликованных объявлений о потерянных или найденных вещах."
         await message.answer(
-            "Активных объявлений не найдено.",
+            empty_text,
             reply_markup=pagination_keyboard(0, 1, city, campus),
         )
         return
