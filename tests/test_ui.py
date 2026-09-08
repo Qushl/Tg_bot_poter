@@ -30,10 +30,12 @@ class UiTests(unittest.TestCase):
         labels = {button.text for row in main_menu().keyboard for button in row}
         self.assertEqual(
             labels,
-            {"Загрузить потеряшку", "Загрузить находку", "Смотреть объявления", "Мои объявления"},
+            {
+                "Загрузить потеряшку", "Загрузить находку", "Смотреть объявления",
+                "Умный поиск", "Мои объявления",
+            },
         )
 
     def test_router_has_handlers(self) -> None:
         self.assertGreaterEqual(len(router.message.handlers), 10)
         self.assertGreaterEqual(len(router.callback_query.handlers), 10)
-

@@ -4,6 +4,7 @@ from aiogram.fsm.state import State, StatesGroup
 class CreateItem(StatesGroup):
     campus = State()
     photo = State()
+    title = State()
     description = State()
     city = State()
     contact = State()
@@ -12,3 +13,7 @@ class CreateItem(StatesGroup):
 
 class CityFilter(StatesGroup):
     city = State()
+
+
+class KeywordSearch(StatesGroup):
+    query = State()

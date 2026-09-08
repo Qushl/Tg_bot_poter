@@ -17,7 +17,7 @@ from keyboards import (
     pagination_keyboard,
 )
 from repository import Repository
-from states import CityFilter, CreateItem
+from states import CityFilter, CreateItem, KeywordSearch
 
 router = Router()
 PER_PAGE = 5
@@ -27,6 +27,7 @@ def item_caption(item: Item, include_contact: bool = True) -> str:
     item_type = "Потеряно" if item.type == "lost" else "Найдено"
     lines = [
         f"<b>{item_type}</b>",
+        f"<b>{escape(item.title)}</b>",
         escape(item.description),
         f"📍 {escape(item.city)}",
         f"🏫 {escape(item.campus)}",
@@ -82,6 +83,17 @@ async def select_item_campus(callback: CallbackQuery, state: FSMContext) -> None
 @router.message(CreateItem.photo, F.photo)
 async def receive_photo(message: Message, state: FSMContext) -> None:
     await state.update_data(photo_file_id=message.photo[-1].file_id)
+    await state.set_state(CreateItem.title)
+    await message.answer("Введите короткий заголовок объявления (до 120 символов).")
+
+
+@router.message(CreateItem.title, F.text)
+async def receive_title(message: Message, state: FSMContext) -> None:
+    title = message.text.strip()
+    if not 3 <= len(title) <= 120:
+        await message.answer("Заголовок должен содержать от 3 до 120 символов.")
+        return
+    await state.update_data(title=title)
     await state.set_state(CreateItem.description)
     await message.answer("Введите описание вещи.")
 
@@ -93,7 +105,11 @@ async def photo_required(message: Message) -> None:
 
 @router.message(CreateItem.description, F.text)
 async def receive_description(message: Message, state: FSMContext) -> None:
-    await state.update_data(description=message.text.strip())
+    description = message.text.strip()
+    if not 10 <= len(description) <= 1500:
+        await message.answer("Описание должно содержать от 10 до 1500 символов.")
+        return
+    await state.update_data(description=description)
     await state.set_state(CreateItem.city)
     await message.answer("Укажите город / район.")
 
@@ -117,6 +133,7 @@ async def receive_contact(message: Message, state: FSMContext) -> None:
         user_id=message.from_user.id,
         type=data["type"],
         photo_file_id=data["photo_file_id"],
+        title=data["title"],
         description=data["description"],
         city=data["city"],
         campus=data["campus"],
@@ -133,9 +150,15 @@ async def receive_contact(message: Message, state: FSMContext) -> None:
 @router.callback_query(CreateItem.confirm, F.data == "item:publish")
 async def publish_item(callback: CallbackQuery, state: FSMContext, repo: Repository) -> None:
     data = await state.get_data()
-    await repo.create_item(callback.from_user.id, {
-        key: data[key] for key in ("type", "photo_file_id", "description", "city", "campus", "contact")
-    })
+    try:
+        await repo.create_item(callback.from_user.id, {
+            key: data[key] for key in (
+                "type", "photo_file_id", "title", "description", "city", "campus", "contact"
+            )
+        })
+    except ValueError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
     await state.clear()
     if callback.message:
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -156,11 +179,12 @@ async def send_items(message: Message, repo: Repository, state: FSMContext, page
     data = await state.get_data()
     city = data.get("filter_city")
     campus = data.get("filter_campus")
-    items, total = await repo.active_items(page, PER_PAGE, city, campus)
+    query = data.get("search_query")
+    items, total = await repo.active_items(page, PER_PAGE, city, campus, query)
     total_pages = max(1, math.ceil(total / PER_PAGE))
     if page >= total_pages:
         page = total_pages - 1
-        items, total = await repo.active_items(page, PER_PAGE, city, campus)
+        items, total = await repo.active_items(page, PER_PAGE, city, campus, query)
     if not items:
         if campus:
             empty_text = (
@@ -172,6 +196,8 @@ async def send_items(message: Message, repo: Repository, state: FSMContext, page
                 f"В городе или районе «{escape(city)}» пока нет опубликованных "
                 "объявлений о потерянных или найденных вещах."
             )
+        elif query:
+            empty_text = f"По запросу «{escape(query)}» ничего не найдено."
         else:
             empty_text = "Пока нет опубликованных объявлений о потерянных или найденных вещах."
         await message.answer(
@@ -181,7 +207,7 @@ async def send_items(message: Message, repo: Repository, state: FSMContext, page
         return
     for item in items:
         await message.answer_photo(item.photo_file_id, caption=item_caption(item))
-    filters = [value for value in (campus, city) if value]
+    filters = [value for value in (campus, city, query) if value]
     suffix = f" · фильтр: {', '.join(filters)}" if filters else ""
     await message.answer(
         f"Страница {page + 1} из {total_pages}{suffix}",
@@ -192,6 +218,26 @@ async def send_items(message: Message, repo: Repository, state: FSMContext, page
 @router.message(F.text == "Смотреть объявления")
 async def browse(message: Message, state: FSMContext, repo: Repository) -> None:
     await state.clear()
+    await send_items(message, repo, state, 0)
+
+
+@router.message(F.text == "Умный поиск")
+async def request_search(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await state.set_state(KeywordSearch.query)
+    await message.answer(
+        "Введите ключевые слова, например: «чёрный рюкзак радиофак» или «студенческий билет»."
+    )
+
+
+@router.message(KeywordSearch.query, F.text)
+async def apply_search(message: Message, state: FSMContext, repo: Repository) -> None:
+    query = message.text.strip()
+    if len(query) < 2:
+        await message.answer("Введите хотя бы два символа для поиска.")
+        return
+    await state.update_data(search_query=query)
+    await state.set_state(None)
     await send_items(message, repo, state, 0)
 
 

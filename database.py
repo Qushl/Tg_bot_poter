@@ -31,6 +31,7 @@ class Item(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id", ondelete="CASCADE"), index=True)
     type: Mapped[str] = mapped_column(String(10), index=True)
     photo_file_id: Mapped[str] = mapped_column(String(512))
+    title: Mapped[str] = mapped_column(String(120), default="Без заголовка", server_default="Без заголовка")
     description: Mapped[str] = mapped_column(Text)
     city: Mapped[str] = mapped_column(String(255), index=True)
     campus: Mapped[str] = mapped_column(String(100), default="Другое место", server_default="Другое место", index=True)
@@ -53,6 +54,11 @@ class Database:
                 if "campus" not in {row[1] for row in columns}:
                     await connection.execute(
                         text("ALTER TABLE items ADD COLUMN campus VARCHAR(100) NOT NULL DEFAULT 'Другое место'")
+                    )
+                columns = await connection.execute(text("PRAGMA table_info(items)"))
+                if "title" not in {row[1] for row in columns}:
+                    await connection.execute(
+                        text("ALTER TABLE items ADD COLUMN title VARCHAR(120) NOT NULL DEFAULT 'Без заголовка'")
                     )
 
     async def sessions(self) -> AsyncIterator[AsyncSession]:

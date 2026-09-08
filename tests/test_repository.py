@@ -20,12 +20,16 @@ class RepositoryTests(unittest.IsolatedAsyncioTestCase):
         await self.database.close()
         self.temp_dir.cleanup()
 
-    async def create_item(self, *, campus: str = "Радиофак (Мира, 32)", city: str = "Екатеринбург"):
+    async def create_item(
+        self, *, campus: str = "Радиофак (Мира, 32)", city: str = "Екатеринбург",
+        user_id: int = 1,
+    ):
         return await self.repo.create_item(
-            1,
+            user_id,
             {
                 "type": "lost",
                 "photo_file_id": "telegram-file-id",
+                "title": f"Рюкзак {campus} {city}",
                 "description": "Чёрный рюкзак",
                 "city": city,
                 "campus": campus,
@@ -48,9 +52,21 @@ class RepositoryTests(unittest.IsolatedAsyncioTestCase):
         _, missing_total = await self.repo.active_items(0, 5, campus="Куба (Куйбышева, 48)")
         self.assertEqual((radio_total, city_total, missing_total), (1, 1, 0))
 
-    async def test_pagination(self) -> None:
-        for _ in range(6):
+    async def test_keyword_search(self) -> None:
+        await self.create_item(campus="Радиофак (Мира, 32)")
+        _, found = await self.repo.active_items(0, 5, query="чёрный радиофак")
+        _, missing = await self.repo.active_items(0, 5, query="красный зонт")
+        self.assertEqual((found, missing), (1, 0))
+
+    async def test_duplicate_is_rejected(self) -> None:
+        await self.create_item()
+        with self.assertRaisesRegex(ValueError, "уже опубликовано"):
             await self.create_item()
+
+    async def test_pagination(self) -> None:
+        for user_id in range(10, 16):
+            await self.repo.upsert_user(user_id, f"user{user_id}", f"User {user_id}")
+            await self.create_item(user_id=user_id)
         first, total = await self.repo.active_items(0, 5)
         second, _ = await self.repo.active_items(1, 5)
         self.assertEqual(total, 6)

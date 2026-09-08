@@ -24,7 +24,8 @@ def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Загрузить потеряшку"), KeyboardButton(text="Загрузить находку")],
-            [KeyboardButton(text="Смотреть объявления"), KeyboardButton(text="Мои объявления")],
+            [KeyboardButton(text="Смотреть объявления"), KeyboardButton(text="Умный поиск")],
+            [KeyboardButton(text="Мои объявления")],
         ],
         resize_keyboard=True,
     )
