@@ -29,7 +29,9 @@ async def main() -> None:
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
 
+
     try:
+        await bot.delete_webhook(drop_pending_updates=True)
         await dispatcher.start_polling(bot, repo=Repository(database))
     finally:
         await bot.session.close()
